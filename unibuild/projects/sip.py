@@ -41,9 +41,9 @@ class SipConfigure(build.Builder):
         serrpath = os.path.join(self._context["build_path"], "stderr.log")
         with open(soutpath, "w") as sout:
             with open(serrpath, "w") as serr:
-                bp = python.python['build_path']
+                bp = config.get('paths.python-install')
 
-                proc = Popen([config['paths']['python'](), "configure.py",
+                proc = Popen([config['paths']['python'], "configure.py",
                               "-b", bp,
                               "-d", os.path.join(bp, "Lib", "site-packages"),
                               "-v", os.path.join(bp, "sip"),
@@ -64,7 +64,6 @@ class SipConfigure(build.Builder):
 
 Project('sip') \
     .depend(build.Make().install()
-            .depend("Python")
             .depend(SipConfigure()
                     .depend(sourceforge.Release("pyqt", "sip/sip-{0}/sip-{0}.zip".format(sip_version), 1))
                     )

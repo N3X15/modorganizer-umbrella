@@ -28,8 +28,9 @@ import os
 """
 Settings
 """
-
-loot_version = "v0.8.0"
+# https://github.com/loot/loot/releases/download/0.10.1/loot-api_0.10.1-0-gd8f8dc4_dev.7z
+loot_version = "0.10.1"
+loot_suffix = '-0-gd8f8dc4_dev'
 
 
 """
@@ -42,8 +43,8 @@ from unibuild.projects import asmjit, udis86, googletest
 
 
 Project("LootApi") \
-    .depend(patch.Copy("loot32.dll", os.path.join(config['__build_base_path'], "install", "bin", "loot"))
-            .depend(github.Release("loot", "loot", loot_version, "LOOT.API.{}".format(loot_version), "7z")
+    .depend(patch.Copy(os.path.join(config.get('paths.root'), 'build', 'lootapi',"loot-api_{}{}".format(loot_version, loot_suffix), "loot_api.dll"), os.path.join(config['__build_base_path'], "install", "bin", "loot"))
+            .depend(github.Release("loot", "loot", loot_version, "loot-api_{}{}".format(loot_version, loot_suffix), "7z")
                     .set_destination("lootapi"))
             )
 
@@ -155,7 +156,7 @@ for git_path, path, branch, dependencies in [
     ("modorganizer-installer_fomod",   "installer_fomod",   "master",          ["Qt5", "modorganizer-uibase"]),
     ("modorganizer-installer_ncc",     "installer_ncc",     "master",          ["Qt5", "modorganizer-uibase", "NCC"]),
     ("modorganizer-bsa_extractor",     "bsa_extractor",     "master",          ["Qt5", "modorganizer-uibase"]),
-    ("modorganizer-plugin_python",     "plugin_python",     "master",          ["Qt5", "boost", "Python", "modorganizer-uibase",
+    ("modorganizer-plugin_python",     "plugin_python",     "master",          ["Qt5", "boost", "modorganizer-uibase",
                                                                                 "sip"]),
     ("modorganizer",                   "modorganizer",      "new_vfs_library", ["Qt5", "boost",
                                                                                 "modorganizer-uibase", "modorganizer-archive",
@@ -191,26 +192,3 @@ for git_path, path, branch, dependencies in [
                            )
     else:
         project.depend(build_step)
-
-
-def python_zip_collect(context):
-    import libpatterns
-    import glob
-    from zipfile import ZipFile
-
-    ip = os.path.join(config['__build_base_path'], "install", "bin")
-    bp = python.python['build_path']
-
-    with ZipFile(os.path.join(ip, "python27.zip"), "w") as pyzip:
-        for pattern in libpatterns.patterns:
-            for f in glob.iglob(os.path.join(bp, pattern)):
-                pyzip.write(f, f[len(bp):])
-
-    return True
-
-
-Project("python_zip") \
-    .depend(build.Execute(python_zip_collect)
-            .depend("Python")
-            )
-

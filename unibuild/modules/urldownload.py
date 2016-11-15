@@ -22,6 +22,7 @@ import os
 import sys
 import logging
 from urlparse import urlparse
+from buildtools import os_utils, utils
 import urllib2
 import tarfile
 import zipfile
@@ -115,8 +116,9 @@ class URLDownload(Retrieval):
 
         progress.value = 0
         progress.job = "Extracting"
-        output_file_path = u"\\\\?\\" + os.path.abspath(output_file_path)
-
+        #output_file_path = u"\\\\?\\" + os.path.abspath(output_file_path)
+        if os.path.isdir(output_file_path):
+            shutil.rmtree(output_file_path,False)
         try:
             os.makedirs(output_file_path)
         except Exception:
@@ -141,7 +143,8 @@ class URLDownload(Retrieval):
                     arch.extractall(output_file_path)
                 archive_file.close()
             elif extension == ".7z":
-                proc = subprocess.Popen([config['paths']['7z'], "x", archive_file_path, "-o{}".format(output_file_path)])
+                os_utils.ensureDirExists(output_file_path)
+                proc = subprocess.Popen([config['paths']['7z'], "x", '-aoa', os_utils.cygpath(os.path.abspath(archive_file_path)), "-o{}".format(os_utils.cygpath(os.path.abspath(output_file_path)))])
                 if proc.wait() != 0:
                     return False
             elif extension in [".exe", ".msi"]:

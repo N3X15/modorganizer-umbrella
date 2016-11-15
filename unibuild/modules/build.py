@@ -24,6 +24,8 @@ from config import config
 import os.path
 import logging
 
+from buildtools import os_utils
+
 STATIC_LIB = 1
 SHARED_LIB = 2
 EXECUTABLE = 3
@@ -227,7 +229,7 @@ class Run(Builder):
     def __init__(self, command, fail_behaviour=Task.FailBehaviour.FAIL, environment=None, working_directory=None,
                  name=None):
         super(Run, self).__init__()
-        self.__command = Lazy(command)
+        self.__command = command.split(' ') if isinstance(command,(str,unicode)) else command
         self.__name = name
         self.__fail_behaviour = fail_behaviour
         self.__environment = Lazy(environment)
@@ -238,36 +240,21 @@ class Run(Builder):
         if self.__name:
             return "run {}".format(self.__name)
         else:
-            return "run {}".format(self.__command.peek().split()[0]).replace("\\", "/")
+            return "run {}".format(self.__command).replace("\\", "/")
 
     def process(self, progress):
         if "build_path" not in self._context:
-            logging.error("source path not known for {},"
-                          " are you missing a matching retrieval script?".format(self.name))
+            logging.error("source path not known for {}, are you missing a matching retrieval script?".format(self.name))
 
-        soutpath = os.path.join(self._context["build_path"], "stdout.log")
-        serrpath = os.path.join(self._context["build_path"], "stderr.log")
-        with open(soutpath, "w") as sout:
-            with open(serrpath, "w") as serr:
-                environment = dict(self.__environment()
-                                   if self.__environment() is not None
-                                   else config["__environment"])
-                cwd = str(self.__working_directory()
-                          if self.__working_directory() is not None
-                          else self._context["build_path"])
-
-                sout.write("running {} in {}".format(self.__command(), cwd))
-                proc = Popen(self.__command(),
-                             env=environment,
-                             cwd=cwd,
-                             shell=True,
-                             stdout=sout, stderr=serr)
-                proc.communicate()
-                if proc.returncode != 0:
-                    logging.error("failed to run %s (returncode %s), see %s and %s",
-                                  self.__command(), proc.returncode, soutpath, serrpath)
-                    return False
+        environment = dict(self.__environment()
+                           if self.__environment() is not None
+                           else config["__environment"])
+        cwd = str(self.__working_directory()
+                  if self.__working_directory() is not None
+                  else self._context["build_path"])
+                  
+        with os_utils.Chdir(cwd):
+            if not os_utils.cmd(self.__command, critical=False, env=environment, echo=True, show_output=True):
+                return False
 
         return True
-
-

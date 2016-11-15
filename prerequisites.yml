@@ -1,0 +1,78 @@
+loot-api:
+  type: http
+  url: https://github.com/loot/loot/releases/download/0.10.1/loot-api_0.10.1-0-gd8f8dc4_dev.7z
+
+asmjit:
+  type: git
+  commit: 31c0b467101bf53d15c8f0cbc2d40107a9ff1ea6
+  uri: 'https://github.com/kobalicek/asmjit'
+
+boost:
+  # http://downloads.sourceforge.net/project/{project}/{path}
+  type: http
+  url: http://downloads.sourceforge.net/project/boost/boost/1.60.0/boost_1_60_0.tar.bz2
+
+gtest:
+  #github.Source("google", "googletest", "master")
+  type: git
+  uri: https://github.com/google/googletest
+
+win{{nbits}}openssl:
+  type: http
+  download-only: yes
+  #openssl_version = "1.0.2j"
+  url: https://slproweb.com/download/Win{{nbits}}OpenSSL-1_0_2j.exe
+  filename: Win{{nbits}}OpenSSL-1_0_2j.exe
+#qt_version = "5.5"
+#qt_version_minor = "1"
+pyqt:
+  type: http
+  url: http://downloads.sourceforge.net/project/pyqt/PyQt5/PyQt-5.5.1/PyQt-gpl-5.5.1.zip
+
+# Python is installed from C:\Python27.
+# Qt is installed from C:\Qt5 or whatever.
+7zip:
+  type: http
+  url: http://www.7-zip.org/a/7z920.tar.bz2
+
+#sip_version = "4.16.9"
+sip:
+  type: http
+  url: http://downloads.sourceforge.net/project/pyqt/sip/sip-4.16.9/sip-4.16.9.zip
+
+#udis_version = "1.7"
+#udis_version_minor = "2"
+udis86:
+  type: http
+  url: http://downloads.sourceforge.net/project/udis86/udis86/1.7/udis86-1.7.2.tar.gz
+
+zlib:
+  type: http
+  url: http://zlib.net/zlib-1.2.8.tar.gz
+
+python:
+  type: http
+  url: https://www.python.org/ftp/python/2.7.12/Python-2.7.12.tgz
+
+# I tried to avoid this but so much shit is broken without self-compiled Qt5.
+jom:
+  type: http
+  url: http://download.qt.io/official_releases/jom/jom.zip
+
+#grep_version = "2.5.4"
+grep-bin:
+  type: http
+  url: http://downloads.sourceforge.net/project/gnuwin32/grep/2.5.4/grep-2.5.4-bin.zip
+
+grep-dep:
+  type: http
+  url: http://downloads.sourceforge.net/project/gnuwin32/grep/2.5.4/grep-2.5.4-dep.zip
+
+flex:
+  type: http
+  url: http://downloads.sourceforge.net/project/winflexbison/win_flex_bison-latest.zip
+
+qt5-git:
+  type: git
+  uri: git://code.qt.io/qt/qt5.git
+  branch: '5.5'

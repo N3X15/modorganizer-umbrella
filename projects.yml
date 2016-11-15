@@ -1,0 +1,90 @@
+archive:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-archive
+bsa_extractor:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-bsa_extractor
+bsatk:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-bsatk
+check_fnis:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-check_fnis
+diagnose_basic:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-diagnose_basic
+esptk:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-esptk
+game_fallout3:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_fallout3
+game_fallout4:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_fallout4
+game_falloutnv:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_falloutnv
+game_gamebryo:
+  branch: new_vfs_library
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_gamebryo
+game_oblivion:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_oblivion
+game_skyrim:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-game_skyrim
+game_skyrimse: # TanninOne's is locked, so we have to use this one.
+  type: git
+  uri: https://github.com/Viomi/modorganizer-game_skyrim_se
+helper:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-helper
+installer_bain:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_bain
+installer_bundle:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_bundle
+installer_fomod:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_fomod
+installer_manual:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_manual
+installer_ncc:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_ncc
+installer_quick:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-installer_quick
+lootcli:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-lootcli
+modorganizer:
+  branch: new_vfs_library
+  type: git
+  uri: https://github.com/TanninOne/modorganizer
+nxmhandler:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-nxmhandler
+plugin_python:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-plugin_python
+preview_base:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-preview_base
+tool_configurator:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-tool_configurator
+tool_inibakery:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-tool_inibakery
+tool_inieditor:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-tool_inieditor
+uibase:
+  branch: new_vfs_library
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-uibase

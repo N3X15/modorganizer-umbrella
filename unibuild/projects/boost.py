@@ -1,6 +1,6 @@
 from unibuild import Project
 from unibuild.modules import b2, sourceforge, patch
-from unibuild.projects import python
+#from unibuild.projects import python
 from config import config
 import os
 
@@ -30,7 +30,7 @@ Project("boost") \
                                ] + ["--with-{0}".format(component) for component in boost_components])
             .depend(patch.CreateFile("user-config.jam",
                                      lambda: config_template.format(
-                                             os.path.dirname(python.python['build_path']),
+                                             os.path.dirname(config.get('paths.python-install')),
                                              "64" if config['architecture'] == "x86_64" else "32")
                                      )
                     .depend(sourceforge.Release("boost",
@@ -38,5 +38,4 @@ Project("boost") \
                                                                                      boost_version.replace(".", "_")),
                                                 tree_depth=1))
                     )
-            ) \
-    .depend("Python")
+            )

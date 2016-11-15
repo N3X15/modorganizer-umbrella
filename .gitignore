@@ -9,3 +9,6 @@ graph.png
 .idea
 7za.exe
 complete.uni.py
+/install
+/download
+/user-config.yml

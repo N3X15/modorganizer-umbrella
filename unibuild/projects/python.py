@@ -30,7 +30,7 @@ python_url = "https://www.python.org/ftp/python"
 
 def python_environment():
     result = config['__environment'].copy()
-    result['Path'] += ";" + os.path.dirname(config['paths']['svn'])
+    #result['Path'] += ";" + os.path.dirname(config['paths']['svn'])
     return result
 
 
@@ -44,6 +44,7 @@ def upgrade_args():
             "/upgrade"]
 
 #if config.get('prefer_binary_dependencies', False):
+'''
 if False:
     # the python installer registers in windows and prevent further installations. This means this installation
     # would interfere with the rest of the system
@@ -89,3 +90,4 @@ else:
                                 )
                         )
                 )
+'''

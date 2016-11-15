@@ -20,6 +20,9 @@ from _winreg import *
 from unibuild.utility.lazy import Lazy
 import os
 
+from buildtools import os_utils
+from buildtools.config import YAMLConfig
+
 global missing_prerequisites
 missing_prerequisites = False
 
@@ -32,7 +35,6 @@ def path_or_default(filename, *default):
         global missing_prerequisites
         missing_prerequisites = True
     return res
-
 
 def get_from_hklm(path, name, wow64=False):
     flags = KEY_READ
@@ -80,18 +82,16 @@ config['paths'] = {
     'download':      "{base_dir}\\downloads",
     'build':         "{base_dir}\\build",
     'progress':      "{base_dir}\\progress",
-    'graphviz':      path_or_default("dot.exe",   "Graphviz2.38", "bin"),
-    'cmake':         path_or_default("cmake.exe", "CMake", "bin"),
-    'git':           path_or_default("git.exe",   "Git", "bin"),
-    'hg':            path_or_default("hg.exe",    "TortoiseHg"),
-    'perl':          path_or_default("perl.exe",  "StrawberryPerl", "bin"),
-    'ruby':          path_or_default("ruby.exe",  "Ruby22-x64", "bin"),
-    'svn':           path_or_default("svn.exe",   "SlikSvn", "bin"),
-    '7z':            path_or_default("7z.exe",    "7-Zip"),
+    'graphviz':      os_utils.which('dot.exe'), #path_or_default("dot.exe",   "Graphviz2.38", "bin"),
+    'cmake':         os_utils.which('cmake.exe'), #path_or_default("cmake.exe", "CMake", "bin"),
+    'git':           os_utils.which('git.exe'), #path_or_default("git.exe",   "Git", "bin"),
+    'hg':            os_utils.which('hg.exe'),
+    'perl':          os_utils.which('perl.exe'),
+    'ruby':          os_utils.which('ruby.exe'),
+    'svn':           os_utils.which('svn.exe'),
+    '7z':            os_utils.which('7z.exe'),
     # we need a python that matches the build architecture
-    'python':        Lazy(lambda: os.path.join(get_from_hklm(r"SOFTWARE\Python\PythonCore\2.7\InstallPath",
-                                                             "", config['architecture'] == "x86"),
-                                               "python.exe")),
+    'python':        os_utils.which('python27.exe'),
     'visual_studio': os.path.realpath(
         os.path.join(get_from_hklm(r"SOFTWARE\Microsoft\VisualStudio\{}".format(config['vc_version']),
                                    "InstallDir", True),
@@ -99,7 +99,16 @@ config['paths'] = {
                      )
     )
 }
-
+config = YAMLConfig('build.yml',config)
+assert config.get('paths.graphviz') is not None
+assert config.get('paths.cmake') is not None
+assert config.get('paths.git') is not None
+assert config.get('paths.hg') is not None
+assert config.get('paths.perl') is not None
+assert config.get('paths.ruby') is not None
+assert config.get('paths.svn') is not None
+assert config.get('paths.7z') is not None
+assert config.get('paths.python') is not None
 if missing_prerequisites:
     print '\nMissing prerequisites listed above - cannot continue'
     exit(1)

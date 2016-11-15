@@ -1,0 +1,27 @@
+architecture: x86_64
+build_type: RelWithDebInfo
+ide_projects: true
+offline: false
+optimize: false
+paths:
+  executables:
+    7z: 'F:\Projects\Skyrim\MOBootstrap\bin\7z.exe'
+    cmake: C:\Program Files\CMake\bin\cmake.exe
+    git: C:\Program Files\Git\cmd\git.exe
+    graphviz: C:\Program Files (x86)\Graphviz2.38\bin\dot.exe
+    hg: C:\Program Files\Mercurial\hg.exe
+    perl: C:\Perl64\bin\perl.exe
+    python: C:\Python27\python.exe
+    ruby: C:\tools\ruby23\bin\ruby.exe
+    svn: C:\Program Files (x86)\Subversion\bin\svn.exe
+  build: '{base_dir}\build'
+  download: '{base_dir}\downloads'
+  progress: '{base_dir}\progress'
+  python-install: C:\python27
+  visual-studio: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC
+prefer_binary_dependencies: false
+repo_update_frequency: 86400
+tools:
+  make: nmake
+vc_version: '14.0'
+qt-makespec: win32-msvc2015

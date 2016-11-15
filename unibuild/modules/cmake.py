@@ -26,6 +26,7 @@ import logging
 import shutil
 import re
 
+from buildtools import os_utils
 
 class CMake(Builder):
 
@@ -77,16 +78,8 @@ class CMake(Builder):
             with on_exit(lambda: progress.finish()):
                 with open(soutpath, "w") as sout:
                     with open(serrpath, "w") as serr:
-                        proc = Popen(
-                            [config["paths"]["cmake"], "-G", "NMake Makefiles", ".."] + self.__arguments,
-                            cwd=build_path,
-                            env=config["__environment"],
-                            stdout=sout, stderr=serr)
-                        proc.communicate()
-                        if proc.returncode != 0:
-                            raise Exception("failed to generate makefile (returncode %s), see %s and %s" %
-                                            (proc.returncode, soutpath, serrpath))
-
+                        with os_utils.Chdir(self.build_path):
+                            os_utils.cmd([config["paths"]["cmake"], "-G", "NMake Makefiles", ".."] + self.__arguments, echo=True, show_output=True, critical=True)
                         proc = Popen([config['tools']['make'], "verbose=1"],
                                      shell=True,
                                      env=config["__environment"],
@@ -183,15 +176,6 @@ class CMakeEdit(Builder):
 
         with open(soutpath, "w") as sout:
             with open(serrpath, "w") as serr:
-                proc = Popen(
-                    [config["paths"]["cmake"], "-G", self.__generator_name(), ".."] + self.__arguments,
-                    cwd=self._context['edit_path'],
-                    env=config["__environment"],
-                    stdout=sout, stderr=serr)
-                proc.communicate()
-                if proc.returncode != 0:
-                    logging.error("failed to generate makefile (returncode %s), see %s and %s",
-                                  proc.returncode, soutpath, serrpath)
-                    return False
-
+                with os_utils.Chdir(self._context['edit_path']):
+                    return os_utils.cmd([config["paths"]["cmake"], "-G", self.__generator_name(), ".."] + self.__arguments, echo=True, show_output=True, critical=False)
         return True

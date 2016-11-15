@@ -66,19 +66,19 @@ else:
 
     num_jobs = multiprocessing.cpu_count() * 2
 
-    configure_cmd = lambda: " ".join(["configure.bat",
+    configure_cmd = ['cmd','/c',"configure.bat",
                                       "-platform", platform,
                                       "-debug-and-release", "-force-debug-info",
                                       "-opensource", "-confirm-license",
                                       "-mp", "-no-compile-examples",
                                       "-no-angle", "-opengl", "desktop",
                                       "-ssl", "-openssl-linked",
-                                      "-I", os.path.join(openssl.openssl['build_path'], "include"),
-                                      "-L", os.path.join(openssl.openssl['build_path']),
+                                      "-I", os.path.join('Win64OpenSSL-1_0', "include"),
+                                      "-L", os.path.join('Win64OpenSSL-1_0'),
                                       "OPENSSL_LIBS=\"-lssleay32MD -llibeay32MD -lgdi32 -lUser32\"",
                                       "-prefix", qt_inst_path] \
                                      + list(itertools.chain(*[("-skip", s) for s in skip_list])) \
-                                     + list(itertools.chain(*[("-nomake", n) for n in nomake_list])))
+                                     + list(itertools.chain(*[("-nomake", n) for n in nomake_list]))
 
     jom = Project("jom") \
         .depend(urldownload.URLDownload("http://download.qt.io/official_releases/jom/jom.zip"))
@@ -110,7 +110,7 @@ else:
                                  "#if OS(WINDOWS) && USE(WCHAR_UNICODE)",
                                  "#if OS(WINCE) && USE(WCHAR_UNICODE)")
 
-    build_webkit = build.Run(r"perl Tools\Scripts\build-webkit --qt --release",
+    build_webkit = build.Run([config.get('paths.perl'),"Tools\Scripts\build-webkit","--qt","--release"],
                              environment=webkit_env,
                              working_directory=lambda: os.path.join(qt5['build_path'], "qtwebkit"),
                              name="build webkit") \
@@ -119,7 +119,7 @@ else:
     # comment to build webkit
     #build_webkit = dummy.Success("webkit")
 
-    init_repo = build.Run("perl init-repository", name="init qt repository") \
+    init_repo = build.Run([config.get('paths.perl'),'init-repository'], name="init qt repository") \
         .set_fail_behaviour(Task.FailBehaviour.CONTINUE) \
         .depend(git.Clone("git://code.qt.io/qt/qt5.git", qt_version))
 
@@ -128,7 +128,7 @@ else:
                 .depend(build_webkit
                         .depend(build.Make(lambda: os.path.join(jom["build_path"],
                                                                 "jom.exe -j {}".format(num_jobs)))
-                                .depend("jom")
+                                .depend(jom)
                                 .depend(build.Run(configure_cmd, name="configure qt")
                                         .depend(patch.Replace("qtbase/configure.bat",
                                                               "if not exist %QTSRC%.gitignore goto sconf", "")

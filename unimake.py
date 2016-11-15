@@ -33,7 +33,6 @@ import os.path
 import argparse
 import re
 
-
 def progress_callback(job, percentage):
     if not percentage and not job:
         sys.stdout.write("\n")
@@ -78,8 +77,7 @@ def extract_independent(graph):
 def visual_studio_environment():
     # when using visual studio we need to set up the environment correctly
     arch = "amd64" if config["architecture"] == 'x86_64' else "x86"
-    proc = Popen([os.path.join(config['paths']['visual_studio'], "vcvarsall.bat"), arch, "&&", "SET"],
-                 stdout=PIPE, stderr=PIPE)
+    proc = Popen([os.path.join(config['paths']['visual_studio'], "vcvarsall.bat"), arch, "&&", "SET"], stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     if proc.returncode != 0:
         logging.error("failed to set up environment (returncode %s): %s", proc.returncode, stderr)
@@ -116,7 +114,7 @@ def init_config(args):
     if 'PYTHON' not in config['__environment']:
         config['__environment']['PYTHON'] = sys.executable
 
-    qtcreator_config_path = r"C:/Users/Tannin/AppData/Roaming/QtProject"
+    qtcreator_config_path = r"C:/Users/Rob/AppData/Roaming/QtProject"
 
     if os.path.isdir(qtcreator_config_path):
         from ConfigParser import RawConfigParser
@@ -168,6 +166,12 @@ def main():
     args = parser.parse_args()
 
     init_config(args)
+    script_dir = os.path.abspath(os.path.dirname(__file__))
+    config.cfg['paths']['root']=script_dir
+    print(config.get('paths.root'))
+
+    from buildtools import os_utils
+    os_utils.getVSVars(config.get('paths.visual_studio'), os.path.join('build','getvsvars.bat'))
 
     for d in ["download", "build", "progress"]:
         if not os.path.exists(config["paths"][d]):
