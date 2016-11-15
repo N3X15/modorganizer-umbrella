@@ -54,7 +54,16 @@ python:
   type: http
   url: https://www.python.org/ftp/python/2.7.12/Python-2.7.12.tgz
 
+ncc/NexusClientCli:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-NCC.git
+
+ncc/NMM:
+  type: hg
+  uri: http://hg.code.sf.net/p/nexusmodmanager/codehgdev45
+
 # I tried to avoid this but so much shit is broken without self-compiled Qt5.
+#### QT5 ####
 jom:
   type: http
   url: http://download.qt.io/official_releases/jom/jom.zip

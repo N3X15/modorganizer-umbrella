@@ -1,21 +1,33 @@
+# ORDER PRESENTED IN THIS FILE IS THE ORDER THESE PROJECTS WILL BE BUILT.
+usvfs:
+  type: git
+  uri: https://github.com/TanninOne/usvfs
+uibase:
+  branch: new_vfs_library
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-uibase
 archive:
   type: git
   uri: https://github.com/TanninOne/modorganizer-archive
-bsa_extractor:
-  type: git
-  uri: https://github.com/TanninOne/modorganizer-bsa_extractor
 bsatk:
   type: git
   uri: https://github.com/TanninOne/modorganizer-bsatk
+esptk:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-esptk
+bsa_extractor:
+  type: git
+  uri: https://github.com/TanninOne/modorganizer-bsa_extractor
 check_fnis:
   type: git
   uri: https://github.com/TanninOne/modorganizer-check_fnis
 diagnose_basic:
   type: git
   uri: https://github.com/TanninOne/modorganizer-diagnose_basic
-esptk:
+game_gamebryo:
+  branch: new_vfs_library
   type: git
-  uri: https://github.com/TanninOne/modorganizer-esptk
+  uri: https://github.com/TanninOne/modorganizer-game_gamebryo
 game_fallout3:
   type: git
   uri: https://github.com/TanninOne/modorganizer-game_fallout3
@@ -25,10 +37,6 @@ game_fallout4:
 game_falloutnv:
   type: git
   uri: https://github.com/TanninOne/modorganizer-game_falloutnv
-game_gamebryo:
-  branch: new_vfs_library
-  type: git
-  uri: https://github.com/TanninOne/modorganizer-game_gamebryo
 game_oblivion:
   type: git
   uri: https://github.com/TanninOne/modorganizer-game_oblivion
@@ -62,10 +70,6 @@ installer_quick:
 lootcli:
   type: git
   uri: https://github.com/TanninOne/modorganizer-lootcli
-modorganizer:
-  branch: new_vfs_library
-  type: git
-  uri: https://github.com/TanninOne/modorganizer
 nxmhandler:
   type: git
   uri: https://github.com/TanninOne/modorganizer-nxmhandler
@@ -84,7 +88,7 @@ tool_inibakery:
 tool_inieditor:
   type: git
   uri: https://github.com/TanninOne/modorganizer-tool_inieditor
-uibase:
+modorganizer:
   branch: new_vfs_library
   type: git
-  uri: https://github.com/TanninOne/modorganizer-uibase
+  uri: https://github.com/TanninOne/modorganizer
