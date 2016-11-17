@@ -10,18 +10,19 @@ import sys
 import time
 from string import Formatter
 
+script_dir = os.path.abspath(os.path.dirname(__file__))
+
+sys.path.append(os.path.join(script_dir, 'lib', 'python-build-tools'))
+
 from buildtools import ENV, http, log, os_utils
 from buildtools.buildsystem import MSBuild, WindowsCCompiler
 from buildtools.buildsystem.visualstudio import (ProjectType,
-                                                 VisualStudio2015Solution)
+                                                 VisualStudio2015Solution,
+                                                 VS2015Project)
 from buildtools.config import YAMLConfig
 from buildtools.repo.git import GitRepository
 from buildtools.repo.hg import HgRepository
 from buildtools.wrapper import CMake
-
-script_dir = os.path.abspath(os.path.dirname(__file__))
-
-sys.path.append(os.path.join(script_dir, 'lib', 'python-build-tools'))
 
 
 
@@ -58,13 +59,12 @@ def timestampDir(dirname):
         f.write(str(time.time()))
 
 
-def firstDirIn(dirname):
-    return [os.path.join(dirname, d) for d in os.listdir(dirname) if os.path.isdir(os.path.join(dirname, d))][0]
+def firstDirIn(dirname, startswith=''):
+    return [os.path.join(dirname, d) for d in os.listdir(dirname) if os.path.isdir(os.path.join(dirname, d)) and (startswith=='' or os.path.basename(d).startswith(startswith))][0]
 
 
 def filesAllExist(files, basedir=''):
     return all([os.path.isfile(os.path.join(basedir, f)) for f in files])
-
 
 def dlPackagesIn(pkgdefs, superrepo='build'):
     os_utils.ensureDirExists('download')
@@ -74,29 +74,35 @@ def dlPackagesIn(pkgdefs, superrepo='build'):
         if dlType == 'git':
             remote = retrievalData.get('remote', 'origin')
             branch = retrievalData.get('branch', 'master')
-            commit = retrievalData.get('commit', None)
+            commit = retrievalData.get('commit')
+            submodules = retrievalData.get('submodules', False)
+            submodules_remote = retrievalData.get('submodules_remote', False)
+            tag = retrievalData.get('tag')
             if 'uri' not in retrievalData:
                 log.critical('uri not in def for %s', destination)
             git = GitRepository(destination, retrievalData['uri'], quiet=True, noisy_clone=True)
             with log.info('Checking for updates to %s...', destination):
-                if hasntBeenCheckedFor(destination):
-                    if git.CheckForUpdates(remote, branch):
+                if args.force_download or not os.path.isdir(destination):
+                    if args.force_download or git.CheckForUpdates(remote, branch, tag=tag, commit=commit):
                         log.info('Updates detecting, pulling...')
-                        git.Pull(remote, branch, commit)
-                    timestampDir(destination)
+                        git.Pull(remote, branch, tag=tag, commit=commit, cleanup=True)
+                    if submodules:
+                        if args.force_download:
+                            with os_utils.Chdir(destination):
+                                os_utils.cmd(['git', 'submodule', 'foreach', '--recursive', 'git clean -dfx'], echo=True, show_output=True, critical=True)
+                        git.UpdateSubmodules(submodules_remote)
         elif dlType == 'hg':
             remote = retrievalData.get('remote', 'default')
             branch = retrievalData.get('branch', 'master')
-            commit = retrievalData.get('commit', None)
+            commit = retrievalData.get('commit', retrievalData.get('tag'))
             if 'uri' not in retrievalData:
                 log.critical('uri not in def for %s', destination)
             hg = HgRepository(destination, retrievalData['uri'], quiet=True, noisy_clone=True)
             with log.info('Checking for updates to %s...', destination):
-                if hasntBeenCheckedFor(destination):
-                    if hg.CheckForUpdates(remote, branch):
+                if args.force_download or not os.path.isdir(destination):
+                    if args.force_download or hg.CheckForUpdates(remote, branch):
                         log.info('Updates detecting, pulling...')
-                        hg.Pull(remote, branch, commit)
-                    timestampDir(destination)
+                        hg.Pull(remote, branch, commit, cleanup=True)
         elif dlType == 'http':
             url = retrievalData['url']
             ext = retrievalData.get('ext', url[url.rfind('.'):])
@@ -104,7 +110,9 @@ def dlPackagesIn(pkgdefs, superrepo='build'):
             if not os.path.isfile(filename):
                 with log.info('Downloading %s...', url):
                     http.DownloadFile(url, filename)
-            if not os.path.isdir(destination) and not retrievalData.get('download-only', False):
+            if (args.force_download or not os.path.isdir(destination)) and not retrievalData.get('download-only', False):
+                if args.force_download:
+                    os_utils.safe_rmtree(destination)
                 os_utils.ensureDirExists(destination)
                 with os_utils.Chdir(destination):
                     os_utils.decompressFile(filename)
@@ -126,6 +134,7 @@ def gen_userfile_content(projdir):
 
 argp = argparse.ArgumentParser()
 argp.add_argument('--reconf-qt', action='store_true', help='Cleans and reconfigures Qt.')
+argp.add_argument('--force-download', action='store_true', help='Cleans and redownloads projects and dependencies. Use when prerequisites.yml changes.')
 args = argp.parse_args()
 
 # This just sets defaults.  Screw with build.yml instead.
@@ -148,19 +157,24 @@ config = {
 }
 userconfig = {
     'paths': {
-        'executables': {
-            '7za': os_utils.which('7za'),
-            'cmake': os_utils.which('cmake'),
-            'git': os_utils.which('git'),
+        'executables':{
+            '7za': os_utils.which('7z.exe'),
+            'cmake': os_utils.which('cmake.exe'),
+            'git': os_utils.which('git.exe'),
             'graphviz': 'C:\\Program Files (x86)\\Graphviz2.38\\bin\\dot.exe',  # Default Graphviz2 install
-            'hg': os_utils.which('hg'),
+            'hg': os_utils.which('hg.exe'),
             'perl': 'C:\\Perl64\\bin\\perl.exe',  # ActiveState
-            'python': 'C:\\Python27\\python.exe',  # python.org
-            'ruby': os_utils.which('ruby'),
-            'svn': os_utils.which('svn'),
-        }
+            'python': os_utils.which('python.exe'),
+            'ruby': os_utils.which('ruby.exe'),
+            'svn': os_utils.which('svn.exe'),
+        },
+        'qt-base': 'C:\\Qt\\Qt5.5.1\\5.5\\msvc2013_64', # Not used. Yet.
+    },
+    'build': {
+        'job-count': multiprocessing.cpu_count() * 2
     }
 }
+
 config = YAMLConfig('build.yml', config, variables={'nbits': '32'})
 config.Load('user-config.yml', merge=True, defaults=userconfig)
 EXECUTABLES = config.get('paths.executables')
@@ -291,12 +305,12 @@ except Exception as e:
 # PREREQUISITES
 #####################################
 # This should probably be dumped into seperate modules or something, but this'll do for now.
-zlib_dir = firstDirIn(os.path.join(script_dir, 'build', 'zlib'))
+zlib_dir = firstDirIn(os.path.join(script_dir, 'build', 'zlib'), startswith='zlib-')
 with log.info('Building zlib...'):
     with os_utils.Chdir(zlib_dir):
         cmake = CMake()
         cmake.setFlag('CMAKE_BUILD_TYPE', config.get('cmake.build-type'))
-        cmake.setFlag('CMAKE_INSTALL_PREFIX', os.path.join(script_dir, 'install'))
+        cmake.setFlag('CMAKE_INSTALL_PREFIX', os.path.join(script_dir, 'build', 'zlib')) # This LOOKS wrong but it's actually fine.
         cmake.generator = 'NMake Makefiles'
         cmake.run(CMAKE=EXECUTABLES['cmake'])
         cmake.build(target='install', CMAKE=EXECUTABLES['cmake'])
@@ -307,7 +321,7 @@ ssleay = "ssleay32MD.lib"
 libeay_path = os.path.join(winopenssl_dir, "lib", "VC", "static", libeay)
 ssleay_path = os.path.join(winopenssl_dir, "lib", "VC", "static", ssleay)
 with log.info('Installing Win{}OpenSSL...'.format(nbits)):
-    if os.path.isfile(libeay_path) and os.path.isfile(ssleay_path):
+    if not args.force_download and os.path.isfile(libeay_path) and os.path.isfile(ssleay_path):
         log.info('Skipping; Both libeay and ssleay are present.')
     else:
         log.warn('*' * 30)
@@ -330,9 +344,9 @@ with log.info('Installing Win{}OpenSSL...'.format(nbits)):
             log.error("Unpacking of OpenSSL timed out")
             sys.exit(1)  # We timed out and nothing was installed
 
-gtest_dir = os.path.join(script_dir, 'build', 'gtest')
-with log.info('Building GTest...'):
-    if filesAllExist(['gmock_main.lib', 'gmock.lib', 'gtest_main.lib', 'gtest.lib'], basedir='install/lib'):
+gtest_dir = os.path.join(script_dir, 'build', 'googletest')
+with log.info('Building GoogleTest...'):
+    if not args.force_download and filesAllExist(['gmock_main.lib', 'gmock.lib', 'gtest_main.lib', 'gtest.lib'], basedir='install/lib'):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(gtest_dir):
@@ -342,11 +356,11 @@ with log.info('Building GTest...'):
             cmake.setFlag('gtest_force_shared_crt:BOOL', 'ON')
             cmake.generator = 'NMake Makefiles'
             cmake.run(CMAKE=EXECUTABLES['cmake'])
-            cmake.build(CMAKE=EXECUTABLES['cmake'], target='install')
+            cmake.build(CMAKE=EXECUTABLES['cmake'])
 
 asmjit_dir = os.path.join(script_dir, 'build', 'asmjit')
 with log.info('Building asmjit...'):
-    if filesAllExist(['asmjit.lib'], basedir='install/lib'):
+    if not args.force_download and filesAllExist(['asmjit.lib'], basedir='install/lib'):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(asmjit_dir):
@@ -382,7 +396,10 @@ qt5git_dir = os.path.join(script_dir, 'build', 'qt5-git')
 with log.info('Building Qt5...'):
     webkit_env = None
     ENV.prependTo('PATH', os.path.join(qt5_dir, 'bin'))
-    if filesAllExist([os.path.join(qt5_dir, 'translations', 'qtdeclarative_uk.qm')]):
+    if args.reconf_qt or args.force_download:
+        log.info('Cleaning %s...',qt5_dir)
+        os_utils.safe_rmtree(qt5_dir)
+    if (not args.reconf_qt and not args.force_download) and filesAllExist([os.path.join(qt5_dir, 'translations', 'qtdeclarative_uk.qm')]):
         log.info('Skipping; Needed files exist.')
     else:
         with os_utils.Chdir(qt5git_dir):
@@ -393,8 +410,8 @@ with log.info('Building Qt5...'):
             os_utils.cmd([EXECUTABLES['perl'], 'init-repository', '--module-subset=' + ','.join(['all'] + ['-' + x for x in skip_list])], echo=True, show_output=True, critical=False)
             nomake_list = ["tests", "examples"]
 
-            num_jobs = multiprocessing.cpu_count() * 2
-            num_jobs /= 2
+            num_jobs = config.get('build.job-count', multiprocessing.cpu_count() * 2)
+            log.info('jom -j (maximum job count) set to %d.  If you want fewer, please set build.job-count in user-config.yml.')
 
             grep_path = os.path.join(script_dir, 'build', 'grep')
             os_utils.ensureDirExists(grep_path)
@@ -485,7 +502,7 @@ with log.info('Building Python 2.7...'):
     if config['architecture'] == "x86_64":
         path_segments.append("amd64")
     basedir = os.path.join(*path_segments)
-    if filesAllExist([
+    if not args.force_download and filesAllExist([
         os.path.join(script_dir, 'install', 'lib', 'python27.lib'),
         os.path.join(includedir, 'pyconfig.h')
     ]):
@@ -510,7 +527,7 @@ with log.info('Building Python 2.7...'):
 
 boost_dir = firstDirIn(os.path.join(script_dir, 'build', 'boost'))
 with log.info('Building Boost...'):
-    if os.path.isdir(os.path.join(boost_dir, 'stage', 'lib')):
+    if not args.force_download and os.path.isdir(os.path.join(boost_dir, 'stage', 'lib')):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(boost_dir):
@@ -534,7 +551,7 @@ with log.info('Building Boost...'):
 
 sip_dir = firstDirIn(os.path.join(script_dir, 'build', 'sip'))
 with log.info('Building sip...'):
-    if filesAllExist([os.path.join(python_dir, 'sip.exe')]):
+    if not args.force_download and filesAllExist([os.path.join(python_dir, 'sip.exe')]):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(sip_dir):
@@ -550,7 +567,7 @@ with log.info('Building sip...'):
 
 pyqt_dir = firstDirIn(os.path.join(script_dir, 'build', 'pyqt'))
 with log.info('Building PyQt5...'):
-    if filesAllExist([os.path.join(python_dir, 'pyuic5.bat')]):
+    if not args.force_download and filesAllExist([os.path.join(python_dir, 'pyuic5.bat')]):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(pyqt_dir):
@@ -576,25 +593,61 @@ with log.info('Installing Loot API...'):
 nmm_dir = os.path.join(script_dir, 'build', 'ncc', 'NMM')
 ncc_dir = os.path.join(script_dir, 'build', 'ncc', 'NexusClientCli')
 with log.info('Building NCC...'):
-    with os_utils.Chdir(ncc_dir):
-        # We patch it LIVE now. os_utils.single_copy(os.path.join(ncc_dir,'NexusClient.sln'), nmm_dir, ignore_mtime=True)
-        debugOrRelease = "-debug" if config['build_type'] == "Debug" else "-release"
-    with os_utils.Chdir(nmm_dir):
-        # And this is why I use buildtools everywhere: Because it has shit like this.
-        sln = VisualStudio2015Solution()
-        sln.LoadFromFile('NexusClient.sln')
-        if "NexusClientCli" not in sln.projectsByName:
-            newproj = sln.AddProject('NexusClientCli', ProjectType.CSHARP_PROJECT, os.path.join(ncc_dir, 'NexusClientCLI', 'NexusClientCLI.csproj'))
-            log.info('Adding project %s (%s) to NexusClient.sln', newproj.name, newproj.guid)
-            sln.SaveToFile('NexusClient.sln')
+    if not args.force_download and filesAllExist([os.path.join(script_dir, 'install', 'bin', 'ncc', 'NexusClientCLI.exe')]):
+        log.info('Skipping; All needed files built.')
+    else:
+        # We patch it LIVE now.
+        # with os_utils.Chdir(ncc_dir):
+        #    os_utils.single_copy(os.path.join(ncc_dir,'NexusClient.sln'), nmm_dir, ignore_mtime=True)
+        with os_utils.Chdir(nmm_dir):
+            # And this is why I use buildtools everywhere: Because it has shit like this.
+            sln = VisualStudio2015Solution()
+            sln.LoadFromFile('NexusClient.sln')
+            ncc_csproj = os.path.relpath(os.path.join(ncc_dir, 'NexusClientCLI', 'NexusClientCLI.csproj'))
+            if not os.path.isfile(ncc_csproj):
+                log.critical('NOT FOUND: %s', ncc_csproj)
+            else:
+                log.info('FOUND: %s', ncc_csproj)
+            changed = False
+            projfile = VS2015Project()
+            projfile.LoadFromFile(ncc_csproj)
+            projguid = projfile.PropertyGroups[0].element.find('ProjectGuid').text
+            log.info('ProjectGuid = %s', projguid)
+            if "NexusClientCli" not in sln.projectsByName:
+                newproj = sln.AddProject('NexusClientCli', ProjectType.CSHARP_PROJECT, ncc_csproj, guid=projguid)
+                log.info('Adding project %s (%s) to NexusClient.sln', newproj.name, newproj.guid)
+                changed = True
+            else:
+                newproj = sln.projectsByName['NexusClientCli']
+                log.info('Project %s (%s) already exists in NexusClient.sln', newproj.name, newproj.guid)
+                if newproj.projectfile != ncc_csproj:
+                    log.info('Changing projectfile: %s -> %s', newproj.projectfile, ncc_csproj)
+                    newproj.projectfile = ncc_csproj
+                    changed = True
+            if changed:
+                log.info('Writing NexusClientCli.sln')
+                sln.SaveToFile('NexusClientCli.sln')  # So we don't get conflicts when pulling.
 
-        msb = MSBuild()
-        msb.solution = 'NexusClient.sln'
-        msb.platform = 'Any CPU'
-        msb.configuration = 'Release'
-        msb.run(ENV.which('msbuild'), project='NexusClientCli', env=ENV)
-    with os_utils.Chdir(ncc_dir):
-        os_utils.cmd(['powershell', '.\\publish.ps1', debugOrRelease, '-outputPath', os.path.join(script_dir, 'install', 'bin')], echo=True, critical=True)
+            '''
+            MSBuild doesn't build properly due to https://github.com/Microsoft/msbuild/issues/417
+            msb = MSBuild()
+            msb.solution = os.path.join(nmm_dir,'NexusClientCli.sln')
+            msb.platform = 'AnyCPU' # 'Any CPU' will not build FOMod etc.
+            msb.configuration = 'Debug' if config.get('build_type') == 'Debug' else 'Release'
+            msb.run(ENV.which('msbuild'), project='NexusClientCli', env=ENV)
+            '''
+            os_utils.cmd(['devenv', 'NexusClientCli.sln', '/build', 'Debug' if config.get('build_type') == 'Debug' else 'Release'], echo=True, show_output=True, critical=True)
+
+        with os_utils.Chdir(ncc_dir):
+            # The Powershell shit is broken and outdated, so I'm just going to copy everything.
+            #debugOrRelease = "-debug" if config['build_type'] == "Debug" else "-release"
+            #os_utils.cmd(['powershell', '.\\publish.ps1', debugOrRelease, '-outputPath', os.path.join(script_dir, 'install', 'bin')], echo=True, critical=True)
+            debugOrRelease = 'Debug' if config.get('build_type') == 'Debug' else 'Release'
+            os_utils.copytree(os.path.join(nmm_dir, 'bin', debugOrRelease), os.path.join(script_dir, 'install', 'bin', 'ncc'), ignore=('.pdb', '.xml'), verbose=True)
+
+with log.info('Installing Spdlog...'):
+    spdlog_dir = os.path.join(script_dir, 'build', 'spdlog')
+    os_utils.copytree(os.path.join(spdlog_dir, 'include'), os.path.join(script_dir, 'install', 'include'), verbose=True)
 
 ###########################################
 # PROJECTS
@@ -609,7 +662,8 @@ cmake_parameters['CMAKE_INSTALL_PREFIX:PATH'] = os.path.join(script_dir, 'instal
 if config.get('optimize', False):
     cmake_parameters['OPTIMIZE_LINK_FLAGS'] = '/LTCG /INCREMENTAL:NO /OPT:REF /OPT:ICF'
 
-usvfs_dir = os.path.join(script_dir, 'build', 'usvfs')
+
+usvfs_dir = os.path.join(superrepo, 'usvfs')
 with log.info('Building USVFS...'):
     with os_utils.Chdir(usvfs_dir):
         cmake = CMake()
@@ -621,7 +675,7 @@ with log.info('Building USVFS...'):
 
 projectBuildInfo = {}
 for projectName, projectCfg in projectdefs.items():
-    projdir = os.path.join(script_dir, 'build', 'modorganizer_super', projectName)
+    projdir = os.path.join(superrepo, projectName)
     projectBuildInfo[projectName] = {'config': projectCfg, 'dir': projdir}
     with log.info('Building %s...', projectName):
         with os_utils.Chdir(projdir):

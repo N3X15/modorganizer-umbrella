@@ -8,14 +8,13 @@ asmjit:
   uri: 'https://github.com/kobalicek/asmjit'
 
 boost:
-  # http://downloads.sourceforge.net/project/{project}/{path}
   type: http
   url: http://downloads.sourceforge.net/project/boost/boost/1.60.0/boost_1_60_0.tar.bz2
 
-gtest:
-  #github.Source("google", "googletest", "master")
+googletest:
   type: git
   uri: https://github.com/google/googletest
+  tag: release-1.7.0 # From AppVeyor build
 
 win{{nbits}}openssl:
   type: http
@@ -56,11 +55,15 @@ python:
 
 ncc/NexusClientCli:
   type: git
-  uri: https://github.com/TanninOne/modorganizer-NCC.git
+  uri: https://github.com/N3X15/modorganizer-NCC.git
 
 ncc/NMM:
-  type: hg
-  uri: http://hg.code.sf.net/p/nexusmodmanager/codehgdev45
+  # Old and busted
+  #type: hg
+  #uri: http://hg.code.sf.net/p/nexusmodmanager/codehgdev45
+  # New hotness
+  type: git
+  uri: https://github.com/Nexus-Mods/Nexus-Mod-Manager.git
 
 # I tried to avoid this but so much shit is broken without self-compiled Qt5.
 #### QT5 ####
@@ -85,3 +88,16 @@ qt5-git:
   type: git
   uri: git://code.qt.io/qt/qt5.git
   branch: '5.5'
+
+##############
+# NEW (not really, Tannin just never added them)
+spdlog:
+  # Used in usvfs
+  type: git
+  #uri: https://github.com/gabime/spdlog.git
+  uri: https://github.com/TanninOne/spdlog.git # TanninOne's special blend[tm]
+fmt:
+  # Used in usvfs
+  type: git
+  uri: https://github.com/fmtlib/fmt.git
+  tag: 3.0.0 # From AppVeyor build
