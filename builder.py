@@ -8,6 +8,8 @@ import re
 import shutil
 import sys
 import time
+import yaml
+import fnmatch
 from string import Formatter
 
 script_dir = os.path.abspath(os.path.dirname(__file__))
@@ -69,6 +71,7 @@ def filesAllExist(files, basedir=''):
 def dlPackagesIn(pkgdefs, superrepo='build'):
     os_utils.ensureDirExists('download')
     for destination, retrievalData in pkgdefs.items():
+        rebuild=args.rebuild_all or destination in args.rebuild
         destination = os.path.join(superrepo, destination)
         dlType = retrievalData['type']
         if dlType == 'git':
@@ -82,12 +85,12 @@ def dlPackagesIn(pkgdefs, superrepo='build'):
                 log.critical('uri not in def for %s', destination)
             git = GitRepository(destination, retrievalData['uri'], quiet=True, noisy_clone=True)
             with log.info('Checking for updates to %s...', destination):
-                if args.force_download or not os.path.isdir(destination):
-                    if args.force_download or git.CheckForUpdates(remote, branch, tag=tag, commit=commit):
+                if rebuild or not os.path.isdir(destination):
+                    if rebuild or git.CheckForUpdates(remote, branch, tag=tag, commit=commit):
                         log.info('Updates detecting, pulling...')
                         git.Pull(remote, branch, tag=tag, commit=commit, cleanup=True)
                     if submodules:
-                        if args.force_download:
+                        if rebuild:
                             with os_utils.Chdir(destination):
                                 os_utils.cmd(['git', 'submodule', 'foreach', '--recursive', 'git clean -dfx'], echo=True, show_output=True, critical=True)
                         git.UpdateSubmodules(submodules_remote)
@@ -99,8 +102,8 @@ def dlPackagesIn(pkgdefs, superrepo='build'):
                 log.critical('uri not in def for %s', destination)
             hg = HgRepository(destination, retrievalData['uri'], quiet=True, noisy_clone=True)
             with log.info('Checking for updates to %s...', destination):
-                if args.force_download or not os.path.isdir(destination):
-                    if args.force_download or hg.CheckForUpdates(remote, branch):
+                if rebuild or not os.path.isdir(destination):
+                    if rebuild or hg.CheckForUpdates(remote, branch):
                         log.info('Updates detecting, pulling...')
                         hg.Pull(remote, branch, commit, cleanup=True)
         elif dlType == 'http':
@@ -110,8 +113,8 @@ def dlPackagesIn(pkgdefs, superrepo='build'):
             if not os.path.isfile(filename):
                 with log.info('Downloading %s...', url):
                     http.DownloadFile(url, filename)
-            if (args.force_download or not os.path.isdir(destination)) and not retrievalData.get('download-only', False):
-                if args.force_download:
+            if (rebuild or not os.path.isdir(destination)) and not retrievalData.get('download-only', False):
+                if rebuild:
                     os_utils.safe_rmtree(destination)
                 os_utils.ensureDirExists(destination)
                 with os_utils.Chdir(destination):
@@ -131,10 +134,138 @@ def gen_userfile_content(projdir):
         }))
         return res
 
+class Builder(object):
+    def __init__(self, name, cfg, build_dir):
+        #: Used for selectively rebuilding projects.
+        self.name=name
+
+        self.build_dir=build_dir
+        self.builder_meta_file=os.path.join(self.build_dir,'.builder')
+
+        #: Files and directories that must be present in order for the build to be considered a success
+        self.expected=[]
+
+        #: Used to generate a snapshot of before/after file states. Useful for building self.expected.
+        self.preExisting=[]
+
+        self.build_cfg = cfg
+        self.configuration={'build_cfg':self.build_cfg}
+        if self.build_cfg is None:
+            self.expected=self.build_cfg.get('expected')
+
+    def TryBuild(self):
+        if not self.shouldBuild(): return True
+        if not self.Build(): return False
+        self.Install()
+        return self.updateManifest()
+
+    def Build(self):
+        '''
+        True: Build succeeded.
+        False: Build failed.
+        '''
+        return True
+
+    def Clean(self):
+        '''
+        Cleans and deconfigures package.
+        '''
+        pass
+
+    def Install(self):
+        if 'manual-install' in self.build_cfg:
+            for pattern, destination in self.build_cfg.get('manual-install',{}).items():
+                installbasedir = os.path.basename(pattern)
+                pattern = os.path.dirname(pattern)
+                for installfilename in os.listdir(os.path.join(self.build_dir)):
+                    if fnmatch.fnmatch(installfilename, pattern):
+                        os_utils.single_copy(installfilename, destination, verbose=True)
+
+    def shouldBuild(self):
+        if args.rebuild_all:
+            return True
+
+        if self.name in args.get_snapshot:
+            log.info('Getting snapshot of %s (%s pre-build)...',script_dir,self.name)
+            for root, _, files in os.walk(script_dir):
+                for filename in files:
+                    self.preExisting.append(os.path.relpath(os.path.abspath(os.path.join(root,filename)),script_dir))
+        if self.name in args.rebuild:
+            return True
+
+        if not os.path.isdir(self.build_dir):
+            return True
+        if not os.path.isfile(self.builder_meta_file):
+            return True
+
+        manifest={}
+        with open(self.builder_meta_file,'r') as f:
+            data=yaml.load(f)
+            manifest=data.get('manifest',{})
+
+        for expectedFile in self.expected:
+            if not os.path.isfile(expectedFile): return True
+            relfilepath=os.path.relpath(expectedFile,script_dir)
+            if relfilepath not in manifest: return True
+            if os.stat(expectedFile).m_time != manifest[relfilepath]: return True
+        return False
+
+    def updateManifest(self):
+        currentFiles=[]
+        newfiles=[]
+        if self.name in args.get_snapshot:
+            log.info('Getting snapshot of %s (%s post-build)...',script_dir,self.name)
+            for root, _, files in os.walk(script_dir):
+                for filename in files:
+                    currentFiles.append(os.path.relpath(os.path.abspath(os.path.join(root,filename)),script_dir))
+            log.info('Comparing...')
+            newfiles=[fn.replace('\\','/') for fn in currentFiles if fn not in self.preExisting]
+
+        newmanifest={}
+        with log.info('Checking for %d expected files...',len(self.expected)):
+            for expectedFile in self.expected:
+                if not os.path.isfile(expectedFile):
+                    log.error('MISSING %s',expectedFile)
+                    return False
+                relfilepath=os.path.relpath(expectedFile,self.build_dir)
+                newmanifest[relfilepath]=os.stat(expectedFile).m_time
+            log.info('All check out!')
+
+        with open(self.builder_meta_file,'w') as f:
+            yaml.dump({'configuration':self.configuration,'manifest':newmanifest,'newfiles':newfiles},f,default_flow_style=False)
+
+        return True
+
+class CMakeBuilder(Builder):
+    def __init__(self, name, cfg, build_dir):
+        super(CMakeBuilder,self).__init__(name,cfg,build_dir)
+        self.cmake = CMake()
+
+    def Build(self):
+        with os_utils.Chdir(self.build_dir):
+            self.cmake.setFlag('CMAKE_BUILD_TYPE', config.get('build-type'))
+            cmake_opts=self.build_cfg.get('cmake',{})
+            cmake_flags=cmake_opts.get('flags',{})
+            for k,v in cmake_flags.items():
+                self.cmake.setFlag(k,v)
+            #self.cmake.setFlag('CMAKE_INSTALL_PREFIX', self.install_prefix)
+            self.cmake.generator = 'NMake Makefiles'
+            self.cmake.run(CMAKE=EXECUTABLES['cmake'])
+            if cmake_opts.get('build',False):
+                target=''
+                if cmake_flags.get('CMAKE_INSTALL_PREFIX') is not None:
+                    target='install'
+                target=cmake_opts.get('build-target',target)
+                self.cmake.build(target=target, CMAKE=EXECUTABLES['cmake'])
+        return True
+
 
 argp = argparse.ArgumentParser()
 argp.add_argument('--reconf-qt', action='store_true', help='Cleans and reconfigures Qt.')
-argp.add_argument('--force-download', action='store_true', help='Cleans and redownloads projects and dependencies. Use when prerequisites.yml changes.')
+#argp.add_argument('--force-download', action='store_true', help='Cleans and redownloads projects and dependencies. Use when prerequisites.yml changes.')
+argp.add_argument('--rebuild-all', action='store_true', help='Clean and rebuild all projects and dependencies.')
+argp.add_argument('--rebuild', action='append', help='Clean and rebuild the dependency or project specified.', default=[])
+argp.add_argument('--get-snapshot', action='append', help='Generate file diff based on before and after snapshots of a project. Useful for expectations.', default=[])
 args = argp.parse_args()
 
 # This just sets defaults.  Screw with build.yml instead.
@@ -144,7 +275,7 @@ config = {
     },
     'architecture': 'x86_64',
     'vc_version':   '14.0',
-    'build_type': "RelWithDebInfo",
+    'build-type': "RelWithDebInfo",
     'ide_projects': True,
     'offline': False,                       # if set, non-mandatory network requests won't be made.
                                             # This is stuff like updating source repositories. The initial
@@ -193,7 +324,8 @@ if not os.path.isdir(superrepo):
     with os_utils.Chdir(superrepo):
         os_utils.cmd([EXECUTABLES['git'], 'init'], show_output=True, critical=True)
 
-prerequisites = YAMLConfig('prerequisites.yml', variables={'nbits': nbits}).cfg
+ymlvars={'nbits': nbits, 'script_dir':script_dir}
+prerequisites = YAMLConfig('prerequisites.yml', variables=ymlvars).cfg
 with log.info('Downloading prerequisites...'):
     dlPackagesIn(prerequisites)
 
@@ -255,7 +387,7 @@ for projRepo, projdir, branch, _ in projs:
     }
     if branch != 'master':
         projectdefs[projdir]['branch'] = branch
-projectdefs = YAMLConfig('projects.yml', default=projectdefs, ordered_dicts=True).cfg
+projectdefs = YAMLConfig('projects.yml', default=projectdefs, variables=ymlvars, ordered_dicts=True).cfg
 with log.info('Downloading projects...'):
     dlPackagesIn(projectdefs, superrepo=superrepo)
 
@@ -305,6 +437,9 @@ except Exception as e:
 # PREREQUISITES
 #####################################
 # This should probably be dumped into seperate modules or something, but this'll do for now.
+CMakeBuilder('zlib', prerequisites['zlib'], firstDirIn(os.path.join(script_dir, 'build', 'zlib'), startswith='zlib-')).TryBuild()
+
+'''
 zlib_dir = firstDirIn(os.path.join(script_dir, 'build', 'zlib'), startswith='zlib-')
 with log.info('Building zlib...'):
     with os_utils.Chdir(zlib_dir):
@@ -314,6 +449,7 @@ with log.info('Building zlib...'):
         cmake.generator = 'NMake Makefiles'
         cmake.run(CMAKE=EXECUTABLES['cmake'])
         cmake.build(target='install', CMAKE=EXECUTABLES['cmake'])
+'''
 
 winopenssl_dir = os.path.join(script_dir, 'build', 'win{}openssl'.format(nbits))
 libeay = "libeay32MD.lib"
@@ -321,7 +457,7 @@ ssleay = "ssleay32MD.lib"
 libeay_path = os.path.join(winopenssl_dir, "lib", "VC", "static", libeay)
 ssleay_path = os.path.join(winopenssl_dir, "lib", "VC", "static", ssleay)
 with log.info('Installing Win{}OpenSSL...'.format(nbits)):
-    if not args.force_download and os.path.isfile(libeay_path) and os.path.isfile(ssleay_path):
+    if not args.rebuild_all and os.path.isfile(libeay_path) and os.path.isfile(ssleay_path):
         log.info('Skipping; Both libeay and ssleay are present.')
     else:
         log.warn('*' * 30)
@@ -344,9 +480,11 @@ with log.info('Installing Win{}OpenSSL...'.format(nbits)):
             log.error("Unpacking of OpenSSL timed out")
             sys.exit(1)  # We timed out and nothing was installed
 
+CMakeBuilder('googletest', prerequisites['googletest'], os.path.join(script_dir, 'build', 'googletest')).TryBuild()
+'''
 gtest_dir = os.path.join(script_dir, 'build', 'googletest')
 with log.info('Building GoogleTest...'):
-    if not args.force_download and filesAllExist(['gmock_main.lib', 'gmock.lib', 'gtest_main.lib', 'gtest.lib'], basedir='install/lib'):
+    if not args.rebuild_all and filesAllExist(['gmock_main.lib', 'gmock.lib', 'gtest_main.lib', 'gtest.lib'], basedir='install/lib'):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(gtest_dir):
@@ -357,10 +495,11 @@ with log.info('Building GoogleTest...'):
             cmake.generator = 'NMake Makefiles'
             cmake.run(CMAKE=EXECUTABLES['cmake'])
             cmake.build(CMAKE=EXECUTABLES['cmake'])
+'''
 
 asmjit_dir = os.path.join(script_dir, 'build', 'asmjit')
 with log.info('Building asmjit...'):
-    if not args.force_download and filesAllExist(['asmjit.lib'], basedir='install/lib'):
+    if not args.rebuild_all and filesAllExist(['asmjit.lib'], basedir='install/lib'):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(asmjit_dir):
@@ -396,10 +535,7 @@ qt5git_dir = os.path.join(script_dir, 'build', 'qt5-git')
 with log.info('Building Qt5...'):
     webkit_env = None
     ENV.prependTo('PATH', os.path.join(qt5_dir, 'bin'))
-    if args.reconf_qt or args.force_download:
-        log.info('Cleaning %s...',qt5_dir)
-        os_utils.safe_rmtree(qt5_dir)
-    if (not args.reconf_qt and not args.force_download) and filesAllExist([os.path.join(qt5_dir, 'translations', 'qtdeclarative_uk.qm')]):
+    if (args.rebuild_all or 'qt' in args.rebuild) and filesAllExist([os.path.join(qt5_dir, 'translations', 'qtdeclarative_uk.qm')]):
         log.info('Skipping; Needed files exist.')
     else:
         with os_utils.Chdir(qt5git_dir):
@@ -446,7 +582,7 @@ with log.info('Building Qt5...'):
                 with open(confrecord, 'r') as f:
                     storedConfMD5 = f.read().strip()
             reconf = False
-            if args.reconf_qt:
+            if args.rebuild_all:
                 log.info('--reconf-qt set, cleaning.')
                 reconf = True
             if not reconf and (storedConfMD5 != '' and newConfMD5 != storedConfMD5):
@@ -502,7 +638,7 @@ with log.info('Building Python 2.7...'):
     if config['architecture'] == "x86_64":
         path_segments.append("amd64")
     basedir = os.path.join(*path_segments)
-    if not args.force_download and filesAllExist([
+    if not args.rebuild_all and filesAllExist([
         os.path.join(script_dir, 'install', 'lib', 'python27.lib'),
         os.path.join(includedir, 'pyconfig.h')
     ]):
@@ -527,7 +663,7 @@ with log.info('Building Python 2.7...'):
 
 boost_dir = firstDirIn(os.path.join(script_dir, 'build', 'boost'))
 with log.info('Building Boost...'):
-    if not args.force_download and os.path.isdir(os.path.join(boost_dir, 'stage', 'lib')):
+    if not args.rebuild_all and os.path.isdir(os.path.join(boost_dir, 'stage', 'lib')):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(boost_dir):
@@ -547,11 +683,11 @@ with log.info('Building Boost...'):
                           "  : {0}\\lib\n"
                           "  : <address-model>{1} ;").format(python_dir, nbits, EXECUTABLES['python'])))
             os_utils.cmd(['cmd', '/c', 'bootstrap.bat'], echo=True, show_output=True, critical=True)
-            os_utils.cmd(['b2.exe', 'address-model=' + nbits, 'toolset=msvc-12.0', 'link=shared'] + ["--with-{0}".format(component) for component in boost_components], echo=True, show_output=True, critical=True)
+            os_utils.cmd(['b2.exe', 'address-model=' + nbits, 'toolset=msvc-14.0', 'link=shared'] + ["--with-{0}".format(component) for component in boost_components], echo=True, show_output=True, critical=True)
 
 sip_dir = firstDirIn(os.path.join(script_dir, 'build', 'sip'))
 with log.info('Building sip...'):
-    if not args.force_download and filesAllExist([os.path.join(python_dir, 'sip.exe')]):
+    if not args.rebuild_all and filesAllExist([os.path.join(python_dir, 'sip.exe')]):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(sip_dir):
@@ -567,7 +703,7 @@ with log.info('Building sip...'):
 
 pyqt_dir = firstDirIn(os.path.join(script_dir, 'build', 'pyqt'))
 with log.info('Building PyQt5...'):
-    if not args.force_download and filesAllExist([os.path.join(python_dir, 'pyuic5.bat')]):
+    if not args.rebuild_all and filesAllExist([os.path.join(python_dir, 'pyuic5.bat')]):
         log.info('Skipping; All needed files built.')
     else:
         with os_utils.Chdir(pyqt_dir):
@@ -593,7 +729,7 @@ with log.info('Installing Loot API...'):
 nmm_dir = os.path.join(script_dir, 'build', 'ncc', 'NMM')
 ncc_dir = os.path.join(script_dir, 'build', 'ncc', 'NexusClientCli')
 with log.info('Building NCC...'):
-    if not args.force_download and filesAllExist([os.path.join(script_dir, 'install', 'bin', 'ncc', 'NexusClientCLI.exe')]):
+    if not args.rebuild_all and filesAllExist([os.path.join(script_dir, 'install', 'bin', 'ncc', 'NexusClientCLI.exe')]):
         log.info('Skipping; All needed files built.')
     else:
         # We patch it LIVE now.
@@ -633,16 +769,16 @@ with log.info('Building NCC...'):
             msb = MSBuild()
             msb.solution = os.path.join(nmm_dir,'NexusClientCli.sln')
             msb.platform = 'AnyCPU' # 'Any CPU' will not build FOMod etc.
-            msb.configuration = 'Debug' if config.get('build_type') == 'Debug' else 'Release'
+            msb.configuration = 'Debug' if config.get('build-type') == 'Debug' else 'Release'
             msb.run(ENV.which('msbuild'), project='NexusClientCli', env=ENV)
             '''
-            os_utils.cmd(['devenv', 'NexusClientCli.sln', '/build', 'Debug' if config.get('build_type') == 'Debug' else 'Release'], echo=True, show_output=True, critical=True)
+            os_utils.cmd(['devenv', 'NexusClientCli.sln', '/build', 'Debug' if config.get('build-type') == 'Debug' else 'Release'], echo=True, show_output=True, critical=True)
 
         with os_utils.Chdir(ncc_dir):
             # The Powershell shit is broken and outdated, so I'm just going to copy everything.
-            #debugOrRelease = "-debug" if config['build_type'] == "Debug" else "-release"
+            #debugOrRelease = "-debug" if config['build-type'] == "Debug" else "-release"
             #os_utils.cmd(['powershell', '.\\publish.ps1', debugOrRelease, '-outputPath', os.path.join(script_dir, 'install', 'bin')], echo=True, critical=True)
-            debugOrRelease = 'Debug' if config.get('build_type') == 'Debug' else 'Release'
+            debugOrRelease = 'Debug' if config.get('build-type') == 'Debug' else 'Release'
             os_utils.copytree(os.path.join(nmm_dir, 'bin', debugOrRelease), os.path.join(script_dir, 'install', 'bin', 'ncc'), ignore=('.pdb', '.xml'), verbose=True)
 
 with log.info('Installing Spdlog...'):
@@ -654,7 +790,7 @@ with log.info('Installing Spdlog...'):
 ###########################################
 
 cmake_parameters = {}
-cmake_parameters['CMAKE_BUILD_TYPE'] = config["build_type"]
+cmake_parameters['CMAKE_BUILD_TYPE'] = config["build-type"]
 cmake_parameters['DEPENDENCIES_DIR'] = os.path.join(script_dir, 'build')
 cmake_parameters['CMAKE_INSTALL_PREFIX:PATH'] = os.path.join(script_dir, 'install')
 

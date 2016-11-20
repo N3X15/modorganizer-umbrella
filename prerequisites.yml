@@ -15,6 +15,14 @@ googletest:
   type: git
   uri: https://github.com/google/googletest
   tag: release-1.7.0 # From AppVeyor build
+  cmake:
+    build: yes
+    build-target: 'all'
+    flags:
+      CMAKE_INSTALL_PREFIX: {{ script_dir }}\install
+      gtest_force_shared_crt: 'ON'
+  manual-install:
+    '*.lib': {{script_dir}}\install\lib
 
 win{{nbits}}openssl:
   type: http
@@ -48,6 +56,19 @@ udis86:
 zlib:
   type: http
   url: http://zlib.net/zlib-1.2.8.tar.gz
+  cmake:
+    build: yes
+    flags:
+      CMAKE_INSTALL_PREFIX: {{ script_dir }}\build\zlib # Looks wrong, but is actually correct.
+  expects:
+    - build/zlib/bin/zlib.dll
+    - build/zlib/include/zconf.h
+    - build/zlib/include/zlib.h
+    - build/zlib/lib/zlib.lib
+    - build/zlib/lib/zlibstatic.lib
+    - build/zlib/share/man/man3/zlib.3
+    - build/zlib/share/pkgconfig/zlib.pc
+
 
 python:
   type: http

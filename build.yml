@@ -1,5 +1,5 @@
 architecture: x86_64
-build_type: RelWithDebInfo
+build-type: RelWithDebInfo
 ide_projects: true
 offline: false
 optimize: false
